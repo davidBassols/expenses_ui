@@ -9,7 +9,7 @@ export default defineConfig({
     proxy: {
       // Forward API calls to the Spring Boot backend (context path /api)
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'https://expenses-h3a5.onrender.com',
         changeOrigin: true,
       },
     },
