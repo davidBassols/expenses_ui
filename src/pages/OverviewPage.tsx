@@ -23,8 +23,8 @@ const MONTH_NAMES = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-const ABOVE_AVG_COLOR = '#ffcdd2'; // light red
-const BELOW_AVG_COLOR = '#c8e6c9'; // light green
+const POSITIVE_COLOR = '#c8e6c9'; // light green — money in
+const NEGATIVE_COLOR = '#ffcdd2'; // light red — money out
 
 function formatMonthYear(year: number, month: number): string {
   return `${MONTH_NAMES[month - 1]} ${year}`;
@@ -48,29 +48,39 @@ export default function OverviewPage() {
    * Pivot the API response:
    * - columns: every category in user-defined order (from categories API)
    * - rows: one per year-month (descending — newest first), with categoryId -> total lookup
-   * - cumulative: running sum of month totals (newest first accumulates)
+   * - cumulative: each month's own total plus every earlier month's total (chronological running sum)
    * - averages: per category across the months where it appears
    */
-  const { categories, rows, averages } = useMemo(() => {
+  const { categories, rows, averages, accountBalance } = useMemo(() => {
     const items = overview ?? [];
 
     // Use user-defined category order from the categories endpoint
     const categories = (allCategories ?? []).map((c) => ({ id: c.id, name: c.name }));
+
+    // Compute cumulative totals chronologically (oldest first) so each month's cumulative
+    // includes its own total plus all previous months' totals.
+    const sortedAsc = [...items].sort((a, b) =>
+      a.year !== b.year ? a.year - b.year : a.month - b.month
+    );
+    let runningTotal = 0;
+    const cumulativeByKey = new Map<string, number>();
+    for (const item of sortedAsc) {
+      runningTotal += item.total;
+      cumulativeByKey.set(`${item.year}-${item.month}`, runningTotal);
+    }
 
     // Months descending: newest first
     const sortedItems = [...items].sort((a, b) =>
       b.year !== a.year ? b.year - a.year : b.month - a.month
     );
 
-    // Build rows with cumulative sum (accumulating from newest backwards)
-    let runningTotal = 0;
     const rows = sortedItems.map((item) => {
       const totals = new Map<string, number>();
       for (const cat of item.byCategory) {
         totals.set(cat.categoryId, cat.total);
       }
-      runningTotal += item.total;
-      return { year: item.year, month: item.month, total: item.total, totals, cumulative: runningTotal };
+      const cumulative = cumulativeByKey.get(`${item.year}-${item.month}`) ?? 0;
+      return { year: item.year, month: item.month, total: item.total, totals, cumulative };
     });
 
     const averages = new Map<string, number>();
@@ -84,7 +94,8 @@ export default function OverviewPage() {
       averages.set(cat.id, avg);
     }
 
-    return { categories, rows, averages };
+    const accountBalance = rows.length > 0 ? rows[0].cumulative : 0;
+    return { categories, rows, averages, accountBalance };
   }, [overview, allCategories]);
 
   if (isLoading) {
@@ -108,9 +119,22 @@ export default function OverviewPage() {
 
   return (
     <>
-      <Typography variant="h5" component="h1" sx={{ mb: 2 }}>
-        Overview
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h5" component="h1">
+          Overview
+        </Typography>
+        {rows.length > 0 && (
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography variant="caption" color="text.secondary">Account balance</Typography>
+            <Typography
+              variant="h5"
+              sx={{ fontWeight: 'bold', color: accountBalance >= 0 ? 'success.main' : 'error.main' }}
+            >
+              {formatAmount(accountBalance)}
+            </Typography>
+          </Box>
+        )}
+      </Box>
 
       {rows.length === 0 ? (
         <Alert severity="info">
@@ -154,14 +178,13 @@ export default function OverviewPage() {
                   <TableCell>{formatMonthYear(row.year, row.month)}</TableCell>
                   {categories.map((cat) => {
                     const value = row.totals.get(cat.id);
-                    const avg = averages.get(cat.id) ?? 0;
                     const isZero = value !== undefined && value === 0;
                     const backgroundColor =
                       value === undefined || isZero
                         ? undefined
-                        : value > avg
-                          ? ABOVE_AVG_COLOR
-                          : BELOW_AVG_COLOR;
+                        : value > 0
+                          ? POSITIVE_COLOR
+                          : NEGATIVE_COLOR;
                     return (
                       <TableCell
                         key={cat.id}
