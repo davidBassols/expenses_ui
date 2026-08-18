@@ -17,6 +17,7 @@ import {
   TableBody,
   TableCell,
   TableContainer,
+  TableFooter,
   TableHead,
   TableRow,
   Typography,
@@ -28,10 +29,14 @@ import { useQuery } from '@tanstack/react-query';
 import { getCategories } from '../api/categories';
 import { AuthError } from '../api/client';
 import { getExpensesByMonth } from '../api/expenses';
+import { getOverview } from '../api/overview';
 import ExpenseFormDialog from '../components/ExpenseFormDialog';
 import type { Expense } from '../types/Expense';
 
 const PLANNED_CARD_COLOR = '#e1bee7'; // light purple — planned (auto-generated, not yet charged)
+const PLANNED_BORDER_COLOR = '#8e24aa'; // dashed border used to mark planned expenses without hiding the sign color
+const POSITIVE_CARD_COLOR = '#c8e6c9'; // light green — money in
+const NEGATIVE_CARD_COLOR = '#ffcdd2'; // light red — money out
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -70,6 +75,12 @@ export default function ExpensesPage() {
     queryKey: ['expenses', year, month],
     queryFn: () => getExpensesByMonth(year, month),
   });
+
+  const { data: overview } = useQuery({ queryKey: ['overview'], queryFn: getOverview });
+  const accountBalance = useMemo(
+    () => (overview ?? []).reduce((sum, item) => sum + item.total, 0),
+    [overview]
+  );
 
   /** Group expenses by categoryId, sorted by date inside each column. */
   const { columns, maxRows, monthTotal } = useMemo(() => {
@@ -160,13 +171,25 @@ export default function ExpensesPage() {
             <ChevronRightIcon />
           </IconButton>
         </Stack>
-        <Stack direction="row" spacing={2} alignItems="center">
-          <Typography
-            variant="h6"
-            sx={{ color: monthTotal >= 0 ? 'success.main' : 'error.main', fontWeight: 'bold' }}
-          >
-            {formatAmount(monthTotal)}
-          </Typography>
+        <Stack direction="row" spacing={3} alignItems="center">
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography variant="caption" color="text.secondary">This month</Typography>
+            <Typography
+              variant="h6"
+              sx={{ color: monthTotal >= 0 ? 'success.main' : 'error.main', fontWeight: 'bold' }}
+            >
+              {formatAmount(monthTotal)}
+            </Typography>
+          </Box>
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography variant="caption" color="text.secondary">Account balance</Typography>
+            <Typography
+              variant="h6"
+              sx={{ color: accountBalance >= 0 ? 'success.main' : 'error.main', fontWeight: 'bold' }}
+            >
+              {formatAmount(accountBalance)}
+            </Typography>
+          </Box>
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => openCreateDialog()}>
             New expense
           </Button>
@@ -190,7 +213,7 @@ export default function ExpensesPage() {
                   <TableCell key={category.id} sx={{ fontWeight: 'bold', verticalAlign: 'middle' }}>
                     <Stack direction="row" alignItems="center" justifyContent="space-between">
                       <span>{category.name}</span>
-                      <Typography variant="body2" sx={{ fontWeight: 'bold', color: sum >= 0 ? 'text.secondary' : 'error.main' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 'bold', color: sum >= 0 ? 'success.main' : 'error.main' }}>
                         {formatAmount(sum)}
                       </Typography>
                     </Stack>
@@ -211,7 +234,10 @@ export default function ExpensesPage() {
                       <TableCell key={category.id} sx={{ border: 'none', pb: 1 }}>
                         <Card
                           variant="outlined"
-                          sx={{ backgroundColor: planned ? PLANNED_CARD_COLOR : undefined }}
+                          sx={{
+                            backgroundColor: expense.cost >= 0 ? POSITIVE_CARD_COLOR : NEGATIVE_CARD_COLOR,
+                            ...(planned && { borderStyle: 'dashed', borderWidth: 2, borderColor: PLANNED_BORDER_COLOR }),
+                          }}
                         >
                           <CardActionArea onClick={() => openEditDialog(expense)}>
                             <CardContent sx={{ py: 1, px: 1.5, '&:last-child': { pb: 1 } }}>
@@ -243,8 +269,23 @@ export default function ExpensesPage() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
-        </TableContainer>
+            <TableFooter>
+              <TableRow>
+                {columns.map(({ category, sum }) => (
+                  <TableCell key={category.id} sx={{ borderTop: 2, borderColor: 'divider' }}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between">
+                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>Total</Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{ fontWeight: 'bold', color: sum >= 0 ? 'success.main' : 'error.main' }}
+                      >
+                        {formatAmount(sum)}
+                      </Typography>
+                    </Stack>
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableFooter>
       )}
 
       <ExpenseFormDialog
