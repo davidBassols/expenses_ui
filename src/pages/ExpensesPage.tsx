@@ -33,7 +33,6 @@ import { getOverview } from '../api/overview';
 import ExpenseFormDialog from '../components/ExpenseFormDialog';
 import type { Expense } from '../types/Expense';
 
-const PLANNED_CARD_COLOR = '#e1bee7'; // light purple — planned (auto-generated, not yet charged)
 const PLANNED_BORDER_COLOR = '#8e24aa'; // dashed border used to mark planned expenses without hiding the sign color
 const POSITIVE_CARD_COLOR = '#c8e6c9'; // light green — money in
 const NEGATIVE_CARD_COLOR = '#ffcdd2'; // light red — money out
@@ -286,6 +285,8 @@ export default function ExpensesPage() {
                 ))}
               </TableRow>
             </TableFooter>
+          </Table>
+        </TableContainer>
       )}
 
       <ExpenseFormDialog
