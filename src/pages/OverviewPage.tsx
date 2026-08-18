@@ -49,10 +49,15 @@ export default function OverviewPage() {
    * - columns: every category in user-defined order (from categories API)
    * - rows: one per year-month (descending — newest first), with categoryId -> total lookup
    * - cumulative: each month's own total plus every earlier month's total (chronological running sum)
-   * - averages: per category across the months where it appears
+   * - averages: per category across past months only (current and future months are excluded)
    */
   const { categories, rows, averages, accountBalance } = useMemo(() => {
     const items = overview ?? [];
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const isPastMonth = (year: number, month: number) =>
+      year < currentYear || (year === currentYear && month < currentMonth);
 
     // Use user-defined category order from the categories endpoint
     const categories = (allCategories ?? []).map((c) => ({ id: c.id, name: c.name }));
@@ -83,9 +88,10 @@ export default function OverviewPage() {
       return { year: item.year, month: item.month, total: item.total, totals, cumulative };
     });
 
+    const pastRows = rows.filter((row) => isPastMonth(row.year, row.month));
     const averages = new Map<string, number>();
     for (const cat of categories) {
-      const values = rows
+      const values = pastRows
         .map((row) => row.totals.get(cat.id))
         .filter((v): v is number => v !== undefined);
       const avg = values.length > 0
@@ -178,11 +184,12 @@ export default function OverviewPage() {
                   <TableCell>{formatMonthYear(row.year, row.month)}</TableCell>
                   {categories.map((cat) => {
                     const value = row.totals.get(cat.id);
+                    const avg = averages.get(cat.id) ?? 0;
                     const isZero = value !== undefined && value === 0;
                     const backgroundColor =
                       value === undefined || isZero
                         ? undefined
-                        : value > 0
+                        : value > avg
                           ? POSITIVE_COLOR
                           : NEGATIVE_COLOR;
                     return (
