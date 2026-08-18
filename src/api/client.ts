@@ -16,7 +16,7 @@ export class AuthError extends Error {
  */
 export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const authHeader = getAuthHeader();
-  const response = await fetch(url, {
+  const response = await fetch('https://expenses-h3a5.onrender.com'+url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
