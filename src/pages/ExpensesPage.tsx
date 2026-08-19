@@ -172,7 +172,7 @@ export default function ExpensesPage() {
         </Stack>
         <Stack direction="row" spacing={3} alignItems="center">
           <Box sx={{ textAlign: 'right' }}>
-            <Typography variant="caption" color="text.secondary">This month</Typography>
+            <Typography variant="caption" color="text.secondary">This month:</Typography>
             <Typography
               variant="h6"
               sx={{ color: monthTotal >= 0 ? 'success.main' : 'error.main', fontWeight: 'bold' }}
@@ -181,7 +181,7 @@ export default function ExpensesPage() {
             </Typography>
           </Box>
           <Box sx={{ textAlign: 'right' }}>
-            <Typography variant="caption" color="text.secondary">Account balance</Typography>
+            <Typography variant="caption" color="text.secondary">Account balance:</Typography>
             <Typography
               variant="h6"
               sx={{ color: accountBalance >= 0 ? 'success.main' : 'error.main', fontWeight: 'bold' }}
