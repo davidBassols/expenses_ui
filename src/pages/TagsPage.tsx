@@ -14,14 +14,17 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import LockIcon from '@mui/icons-material/Lock';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AuthError } from '../api/client';
-import { deleteTag, getTags } from '../api/tags';
+import { deleteTag, getTagDetail, getTags, updateTag } from '../api/tags';
 import TagFormDialog from '../components/TagFormDialog';
 import type { Tag } from '../types/Tag';
 
@@ -37,8 +40,26 @@ export default function TagsPage() {
     queryFn: getTags,
   });
 
+  const detailQueries = useQueries({
+    queries: (tags ?? []).map((tag) => ({
+      queryKey: ['tags', tag.id, 'detail'],
+      queryFn: () => getTagDetail(tag.id),
+    })),
+  });
+  const totalsByTagId = new Map(
+    detailQueries.flatMap((query) => query.data ? [[query.data.id, query.data.totalCost] as const] : [])
+  );
+
   const deleteMutation = useMutation({
     mutationFn: deleteTag,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tags'] });
+    },
+    onError: (err: Error) => setErrorMessage(err.message),
+  });
+
+  const activeMutation = useMutation({
+    mutationFn: (tag: Tag) => updateTag(tag.id, { name: tag.name, active: !tag.active }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tags'] });
     },
@@ -90,6 +111,8 @@ export default function TagsPage() {
           <TableHead>
             <TableRow>
               <TableCell>Name</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="right">Total</TableCell>
               <TableCell>Created</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
@@ -97,7 +120,7 @@ export default function TagsPage() {
           <TableBody>
             {tags && tags.length === 0 && (
               <TableRow>
-                <TableCell colSpan={3} align="center">
+                <TableCell colSpan={5} align="center">
                   <Typography color="text.secondary" sx={{ py: 4 }}>
                     No tags yet. Create one (e.g. "holidays-2026") and assign it to expenses to
                     track what a trip or project cost in total.
@@ -113,6 +136,18 @@ export default function TagsPage() {
                 onClick={() => navigate(`/tags/${tag.id}`)}
               >
                 <TableCell>{tag.name}</TableCell>
+                <TableCell>
+                  <Typography
+                    variant="body2"
+                    color={tag.active ? 'success.main' : 'text.secondary'}
+                    sx={{ fontWeight: 600 }}
+                  >
+                    {tag.active ? 'Active' : 'Closed'}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  {totalsByTagId.has(tag.id) ? totalsByTagId.get(tag.id)!.toFixed(2) : '—'}
+                </TableCell>
                 <TableCell>{new Date(tag.createdAt).toLocaleDateString()}</TableCell>
                 <TableCell align="right">
                   <IconButton
@@ -125,6 +160,21 @@ export default function TagsPage() {
                   >
                     <EditIcon fontSize="small" />
                   </IconButton>
+                  <Tooltip title={tag.active ? 'Close tag' : 'Reopen tag'}>
+                    <span>
+                      <IconButton
+                        aria-label={tag.active ? 'close tag' : 'reopen tag'}
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          activeMutation.mutate(tag);
+                        }}
+                        disabled={activeMutation.isPending}
+                      >
+                        {tag.active ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
+                      </IconButton>
+                    </span>
+                  </Tooltip>
                   <IconButton
                     aria-label="delete"
                     size="small"

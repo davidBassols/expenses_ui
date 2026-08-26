@@ -23,8 +23,8 @@ const MONTH_NAMES = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-const POSITIVE_COLOR = '#c8e6c9'; // light green — money in
-const NEGATIVE_COLOR = '#ffcdd2'; // light red — money out
+const POSITIVE_COLOR = '#b7d7c0';
+const NEGATIVE_COLOR = '#edb8ae';
 
 function formatMonthYear(year: number, month: number): string {
   return `${MONTH_NAMES[month - 1]} ${year}`;

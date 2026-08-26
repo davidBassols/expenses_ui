@@ -31,7 +31,7 @@ export default function TagFormDialog({ open, tag, onClose, onError }: TagFormDi
 
   const mutation = useMutation({
     mutationFn: (value: string) =>
-      isEdit ? updateTag(tag.id, { name: value }) : createTag({ name: value }),
+      isEdit ? updateTag(tag.id, { name: value, active: tag.active }) : createTag({ name: value }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tags'] });
       onClose();

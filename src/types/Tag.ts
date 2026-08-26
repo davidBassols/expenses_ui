@@ -4,6 +4,7 @@ import type { Expense } from './Expense';
 export interface Tag {
   id: string;
   name: string;
+  active: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -11,6 +12,7 @@ export interface Tag {
 /** Mirrors com.zerosmet.expenses.dto.tag.TagRequest */
 export interface TagRequest {
   name: string;
+  active?: boolean;
 }
 
 /** Mirrors com.zerosmet.expenses.dto.tag.TagSummary (embedded in ExpenseResponse) */

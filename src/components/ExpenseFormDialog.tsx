@@ -49,6 +49,7 @@ export default function ExpenseFormDialog({
 
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: getCategories });
   const { data: tags } = useQuery({ queryKey: ['tags'], queryFn: getTags });
+  const activeTags = tags?.filter((tag) => tag.active) ?? [];
 
   useEffect(() => {
     if (open) {
@@ -106,7 +107,9 @@ export default function ExpenseFormDialog({
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>{isEdit ? 'Edit expense' : 'New expense'}</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+      <DialogContent
+        sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important', pb: 2.5 }}
+      >
         <TextField
           autoFocus
           label="Name"
@@ -177,13 +180,13 @@ export default function ExpenseFormDialog({
             value={tagIds}
             onChange={(e) => setTagIds(typeof e.target.value === 'string' ? [e.target.value] : e.target.value)}
             renderValue={(selected) =>
-              (tags ?? [])
+              activeTags
                 .filter((t) => selected.includes(t.id))
                 .map((t) => t.name)
                 .join(', ')
             }
           >
-            {tags?.map((tag) => (
+            {activeTags.map((tag) => (
               <MenuItem key={tag.id} value={tag.id}>
                 {tag.name}
               </MenuItem>

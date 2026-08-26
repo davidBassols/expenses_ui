@@ -172,7 +172,7 @@ export default function ExpensesPage() {
         </Stack>
         <Stack direction="row" spacing={3} alignItems="center">
           <Box sx={{ textAlign: 'right' }}>
-            <Typography variant="caption" color="text.secondary">This month:</Typography>
+            <Typography variant="caption" color="text.secondary">This month</Typography>
             <Typography
               variant="h6"
               sx={{ color: monthTotal >= 0 ? 'success.main' : 'error.main', fontWeight: 'bold' }}
@@ -181,7 +181,7 @@ export default function ExpensesPage() {
             </Typography>
           </Box>
           <Box sx={{ textAlign: 'right' }}>
-            <Typography variant="caption" color="text.secondary">Account balance:</Typography>
+            <Typography variant="caption" color="text.secondary">Account balance</Typography>
             <Typography
               variant="h6"
               sx={{ color: accountBalance >= 0 ? 'success.main' : 'error.main', fontWeight: 'bold' }}
@@ -240,11 +240,14 @@ export default function ExpensesPage() {
                         >
                           <CardActionArea onClick={() => openEditDialog(expense)}>
                             <CardContent sx={{ py: 1, px: 1.5, '&:last-child': { pb: 1 } }}>
-                              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>
+                              <Stack spacing={0.25}>
+                                <Typography
+                                  variant="body2"
+                                  sx={{ fontWeight: 500, overflowWrap: 'anywhere' }}
+                                >
                                   {expense.name}
                                 </Typography>
-                                <Typography variant="body2" sx={{ ml: 1, flexShrink: 0 }}>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
                                   {formatAmount(expense.cost)}
                                 </Typography>
                               </Stack>
