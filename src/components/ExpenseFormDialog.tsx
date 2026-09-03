@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Button,
   Dialog,
@@ -51,8 +51,18 @@ export default function ExpenseFormDialog({
   const { data: tags } = useQuery({ queryKey: ['tags'], queryFn: getTags });
   const activeTags = tags?.filter((tag) => tag.active) ?? [];
 
+  // Read latest props via refs so the reset effect only depends on `open` — background
+  // re-renders of the parent (e.g. query invalidation) create new `expense`/`defaults`
+  // object references and must not wipe the form while it's already open.
+  const expenseRef = useRef(expense);
+  const defaultsRef = useRef(defaults);
+  expenseRef.current = expense;
+  defaultsRef.current = defaults;
+
   useEffect(() => {
     if (open) {
+      const expense = expenseRef.current;
+      const defaults = defaultsRef.current;
       setName(expense?.name ?? '');
       setDescription(expense?.description ?? '');
       setBilled(expense?.billed ?? defaults?.billed ?? '');
@@ -61,7 +71,7 @@ export default function ExpenseFormDialog({
       setCategoryId(expense?.categoryId ?? defaults?.categoryId ?? '');
       setTagIds(expense?.tags.map((t) => t.id) ?? []);
     }
-  }, [open, expense, defaults]);
+  }, [open]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['expenses'] });
