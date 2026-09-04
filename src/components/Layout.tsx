@@ -23,6 +23,7 @@ import RepeatIcon from '@mui/icons-material/Repeat';
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { clearCredentials } from '../api/auth';
+import { clearPersistedQueryCache } from '../cache/persist';
 
 const DRAWER_WIDTH = 240;
 
@@ -42,6 +43,7 @@ export default function Layout() {
 
   const handleLogout = () => {
     clearCredentials();
+    clearPersistedQueryCache();
     queryClient.clear();
     navigate('/login', { replace: true });
   };

@@ -15,9 +15,9 @@ import {
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCategories } from '../api/categories';
-import { createExpense, deleteExpense, updateExpense } from '../api/expenses';
+import { deleteExpense, updateExpense } from '../api/expenses';
 import { getTags } from '../api/tags';
-import type { Expense } from '../types/Expense';
+import type { Expense, ExpenseRequest } from '../types/Expense';
 
 interface ExpenseFormDialogProps {
   open: boolean;
@@ -25,6 +25,8 @@ interface ExpenseFormDialogProps {
   expense: Expense | null;
   /** Initial values for creation (e.g. current month, preselected category). */
   defaults?: { billed?: string; categoryId?: string };
+  /** Creation is handed to the parent, which sends it in the background and closes the dialog at once. */
+  onCreate: (request: ExpenseRequest) => void;
   onClose: () => void;
   onError: (message: string) => void;
 }
@@ -33,6 +35,7 @@ export default function ExpenseFormDialog({
   open,
   expense,
   defaults,
+  onCreate,
   onClose,
   onError,
 }: ExpenseFormDialogProps) {
@@ -79,24 +82,32 @@ export default function ExpenseFormDialog({
     queryClient.invalidateQueries({ queryKey: ['tags'] });
   };
 
-  const saveMutation = useMutation({
-    mutationFn: () => {
-      const request = {
-        name: name.trim(),
-        description: description.trim() || null,
-        billed: planned ? null : billed,
-        cost: parseFloat(cost),
-        categoryId,
-        tagIds,
-      };
-      return isEdit ? updateExpense(expense.id, request) : createExpense(request);
-    },
+  const buildRequest = (): ExpenseRequest => ({
+    name: name.trim(),
+    description: description.trim() || null,
+    billed: planned ? null : billed,
+    cost: parseFloat(cost),
+    categoryId,
+    tagIds,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: () => updateExpense(expense!.id, buildRequest()),
     onSuccess: () => {
       invalidate();
       onClose();
     },
     onError: (err: Error) => onError(err.message),
   });
+
+  const submit = () => {
+    if (isEdit) {
+      updateMutation.mutate();
+    } else {
+      onCreate(buildRequest());
+      onClose();
+    }
+  };
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteExpense(expense!.id),
@@ -209,7 +220,7 @@ export default function ExpenseFormDialog({
           <Button
             color="error"
             onClick={() => deleteMutation.mutate()}
-            disabled={deleteMutation.isPending || saveMutation.isPending}
+            disabled={deleteMutation.isPending || updateMutation.isPending}
             sx={{ mr: 'auto' }}
           >
             Delete
@@ -218,10 +229,10 @@ export default function ExpenseFormDialog({
         <Button onClick={onClose}>Cancel</Button>
         <Button
           variant="contained"
-          onClick={() => saveMutation.mutate()}
-          disabled={!isValid || saveMutation.isPending || deleteMutation.isPending}
+          onClick={submit}
+          disabled={!isValid || updateMutation.isPending || deleteMutation.isPending}
         >
-          {saveMutation.isPending ? 'Saving…' : 'Save'}
+          {updateMutation.isPending ? 'Saving…' : 'Save'}
         </Button>
       </DialogActions>
     </Dialog>
