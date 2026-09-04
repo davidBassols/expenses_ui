@@ -20,22 +20,31 @@ import {
   TableFooter,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getCategories } from '../api/categories';
 import { AuthError } from '../api/client';
-import { getExpensesByMonth } from '../api/expenses';
+import { createExpense, getExpensesByMonth } from '../api/expenses';
 import { getOverview } from '../api/overview';
 import ExpenseFormDialog from '../components/ExpenseFormDialog';
-import type { Expense } from '../types/Expense';
+import type { Expense, ExpenseRequest } from '../types/Expense';
 
 const PLANNED_BORDER_COLOR = '#8e24aa'; // dashed border used to mark planned expenses without hiding the sign color
 const POSITIVE_CARD_COLOR = '#c8e6c9'; // light green — money in
 const NEGATIVE_CARD_COLOR = '#ffcdd2'; // light red — money out
+
+/** A creation that has been sent to the backend but not confirmed yet. */
+interface PendingExpense {
+  tempId: string;
+  year: number;
+  month: number;
+  request: ExpenseRequest;
+}
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -54,6 +63,11 @@ function toISODate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+function shiftMonth(year: number, month: number, delta: number): { year: number; month: number } {
+  const date = new Date(year, month - 1 + delta, 1);
+  return { year: date.getFullYear(), month: date.getMonth() + 1 };
+}
+
 export default function ExpensesPage() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -62,17 +76,33 @@ export default function ExpensesPage() {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [defaultCategoryId, setDefaultCategoryId] = useState<string | undefined>(undefined);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingExpenses, setPendingExpenses] = useState<PendingExpense[]>([]);
+
+  const queryClient = useQueryClient();
 
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: getCategories });
 
   const {
     data: expenses,
     isLoading,
+    isFetching,
     isError,
     error,
   } = useQuery({
     queryKey: ['expenses', year, month],
     queryFn: () => getExpensesByMonth(year, month),
+  });
+
+  // Warm the neighbouring months so navigation is instant and they end up in the offline cache.
+  const previous = shiftMonth(year, month, -1);
+  const next = shiftMonth(year, month, 1);
+  useQuery({
+    queryKey: ['expenses', previous.year, previous.month],
+    queryFn: () => getExpensesByMonth(previous.year, previous.month),
+  });
+  useQuery({
+    queryKey: ['expenses', next.year, next.month],
+    queryFn: () => getExpensesByMonth(next.year, next.month),
   });
 
   const { data: overview } = useQuery({ queryKey: ['overview'], queryFn: getOverview });
@@ -81,10 +111,57 @@ export default function ExpensesPage() {
     [overview]
   );
 
+  // Creations are fire-and-forget: the dialog closes immediately and the card shows up as
+  // pending until the (possibly very slow, cold-starting) backend confirms it.
+  const createMutation = useMutation({
+    mutationFn: (item: PendingExpense) => createExpense(item.request),
+    // Awaited so the pending card is only dropped once the refetched list contains the real one.
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['overview'] });
+      queryClient.invalidateQueries({ queryKey: ['tags'] });
+      await queryClient.invalidateQueries({ queryKey: ['expenses'] });
+    },
+    onError: (err: Error, item) =>
+      setErrorMessage(`Failed to create "${item.request.name}": ${err.message}`),
+    onSettled: (_data, _err, item) =>
+      setPendingExpenses((current) => current.filter((p) => p.tempId !== item.tempId)),
+  });
+
+  const handleCreate = (request: ExpenseRequest) => {
+    // Undated (planned) expenses stay in the month currently on screen.
+    const item: PendingExpense = {
+      tempId: crypto.randomUUID(),
+      year: request.billed ? Number(request.billed.slice(0, 4)) : year,
+      month: request.billed ? Number(request.billed.slice(5, 7)) : month,
+      request,
+    };
+    setPendingExpenses((current) => [...current, item]);
+    createMutation.mutate(item);
+  };
+
+  const pendingIds = useMemo(
+    () => new Set(pendingExpenses.map((p) => p.tempId)),
+    [pendingExpenses]
+  );
+
   /** Group expenses by categoryId, sorted by date inside each column. */
   const { columns, maxRows, monthTotal } = useMemo(() => {
+    const placeholders: Expense[] = pendingExpenses
+      .filter((p) => p.year === year && p.month === month)
+      .map((p) => ({
+        id: p.tempId,
+        name: p.request.name,
+        description: p.request.description ?? null,
+        billed: p.request.billed,
+        cost: p.request.cost,
+        categoryId: p.request.categoryId,
+        categoryName: '',
+        tags: [],
+        createdAt: '',
+        updatedAt: '',
+      }));
     const byCategory = new Map<string, Expense[]>();
-    for (const expense of expenses ?? []) {
+    for (const expense of [...(expenses ?? []), ...placeholders]) {
       const list = byCategory.get(expense.categoryId) ?? [];
       list.push(expense);
       byCategory.set(expense.categoryId, list);
@@ -107,24 +184,18 @@ export default function ExpensesPage() {
     const maxRows = Math.max(0, ...columns.map((c) => c.expenses.length));
     const monthTotal = columns.reduce((total, c) => total + c.sum, 0);
     return { columns, maxRows, monthTotal };
-  }, [expenses, categories]);
+  }, [expenses, categories, pendingExpenses, year, month]);
 
   const goToPreviousMonth = () => {
-    if (month === 1) {
-      setYear(year - 1);
-      setMonth(12);
-    } else {
-      setMonth(month - 1);
-    }
+    const target = shiftMonth(year, month, -1);
+    setYear(target.year);
+    setMonth(target.month);
   };
 
   const goToNextMonth = () => {
-    if (month === 12) {
-      setYear(year + 1);
-      setMonth(1);
-    } else {
-      setMonth(month + 1);
-    }
+    const target = shiftMonth(year, month, 1);
+    setYear(target.year);
+    setMonth(target.month);
   };
 
   /**
@@ -145,7 +216,8 @@ export default function ExpensesPage() {
     setDialogOpen(true);
   };
 
-  if (isError) {
+  // A failed refresh must not throw away the cached month that is already on screen.
+  if (isError && expenses === undefined) {
     if (error instanceof AuthError) {
       return <Navigate to="/login" replace />;
     }
@@ -169,6 +241,11 @@ export default function ExpensesPage() {
           <IconButton onClick={goToNextMonth} aria-label="Next month">
             <ChevronRightIcon />
           </IconButton>
+          {isFetching && !isLoading && (
+            <Tooltip title="Refreshing from the server">
+              <CircularProgress size={16} />
+            </Tooltip>
+          )}
         </Stack>
         <Stack direction="row" spacing={3} alignItems="center">
           <Box sx={{ textAlign: 'right' }}>
@@ -229,6 +306,42 @@ export default function ExpensesPage() {
                       return <TableCell key={category.id} sx={{ border: 'none' }} />;
                     }
                     const planned = isPlanned(expense);
+                    const pending = pendingIds.has(expense.id);
+                    const cardContent = (
+                      <CardContent sx={{ py: 1, px: 1.5, '&:last-child': { pb: 1 } }}>
+                        <Stack spacing={0.25}>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: 500, overflowWrap: 'anywhere' }}
+                          >
+                            {expense.name}
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {formatAmount(expense.cost)}
+                          </Typography>
+                        </Stack>
+                        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.5, flexWrap: 'wrap' }}>
+                          <Typography variant="caption" color="text.secondary">
+                            {expense.billed ?? 'not charged yet'}
+                          </Typography>
+                          {planned && (
+                            <Chip label="planned" size="small" color="secondary" variant="outlined" />
+                          )}
+                          {pending && (
+                            <Chip
+                              label="saving…"
+                              size="small"
+                              color="warning"
+                              variant="outlined"
+                              icon={<CircularProgress size={10} color="inherit" />}
+                            />
+                          )}
+                          {expense.tags.map((tag) => (
+                            <Chip key={tag.id} label={tag.name} size="small" variant="outlined" />
+                          ))}
+                        </Stack>
+                      </CardContent>
+                    );
                     return (
                       <TableCell key={category.id} sx={{ border: 'none', pb: 1 }}>
                         <Card
@@ -236,34 +349,16 @@ export default function ExpensesPage() {
                           sx={{
                             backgroundColor: expense.cost >= 0 ? POSITIVE_CARD_COLOR : NEGATIVE_CARD_COLOR,
                             ...(planned && { borderStyle: 'dashed', borderWidth: 2, borderColor: PLANNED_BORDER_COLOR }),
+                            ...(pending && { opacity: 0.6 }),
                           }}
                         >
-                          <CardActionArea onClick={() => openEditDialog(expense)}>
-                            <CardContent sx={{ py: 1, px: 1.5, '&:last-child': { pb: 1 } }}>
-                              <Stack spacing={0.25}>
-                                <Typography
-                                  variant="body2"
-                                  sx={{ fontWeight: 500, overflowWrap: 'anywhere' }}
-                                >
-                                  {expense.name}
-                                </Typography>
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                  {formatAmount(expense.cost)}
-                                </Typography>
-                              </Stack>
-                              <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.5, flexWrap: 'wrap' }}>
-                                <Typography variant="caption" color="text.secondary">
-                                  {expense.billed ?? 'not charged yet'}
-                                </Typography>
-                                {planned && (
-                                  <Chip label="planned" size="small" color="secondary" variant="outlined" />
-                                )}
-                                {expense.tags.map((tag) => (
-                                  <Chip key={tag.id} label={tag.name} size="small" variant="outlined" />
-                                ))}
-                              </Stack>
-                            </CardContent>
-                          </CardActionArea>
+                          {pending ? (
+                            cardContent
+                          ) : (
+                            <CardActionArea onClick={() => openEditDialog(expense)}>
+                              {cardContent}
+                            </CardActionArea>
+                          )}
                         </Card>
                       </TableCell>
                     );
@@ -299,6 +394,7 @@ export default function ExpensesPage() {
           billed: toISODate(year, month, Math.min(now.getDate(), 28)),
           categoryId: defaultCategoryId,
         }}
+        onCreate={handleCreate}
         onClose={() => setDialogOpen(false)}
         onError={setErrorMessage}
       />
