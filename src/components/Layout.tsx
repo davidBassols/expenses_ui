@@ -11,6 +11,7 @@ import {
   ListItemIcon,
   ListItemText,
   Toolbar,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import CategoryIcon from '@mui/icons-material/Category';
@@ -66,6 +67,11 @@ export default function Layout() {
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
             Expenses{currentSection ? ` — ${currentSection.label}` : ''}
           </Typography>
+          <Tooltip title={`Built ${__BUILD_TIME__}`}>
+            <Typography variant="caption" sx={{ mr: 1, opacity: 0.8 }}>
+              v{__APP_VERSION__}
+            </Typography>
+          </Tooltip>
           <Button color="inherit" onClick={handleLogout}>
             Logout
           </Button>
