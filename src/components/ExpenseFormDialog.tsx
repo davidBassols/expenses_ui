@@ -95,7 +95,6 @@ export default function ExpenseFormDialog({
     mutationFn: () => updateExpense(expense!.id, buildRequest()),
     onSuccess: () => {
       invalidate();
-      onClose();
     },
     onError: (err: Error) => onError(err.message),
   });
@@ -103,6 +102,7 @@ export default function ExpenseFormDialog({
   const submit = () => {
     if (isEdit) {
       updateMutation.mutate();
+      onClose();
     } else {
       onCreate(buildRequest());
       onClose();
